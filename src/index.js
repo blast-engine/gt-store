@@ -390,3 +390,4 @@ export const createGTStoreConnect = ({ store }) => deriveQueriesFromProps => Com
       return <Component {...this.props} {...currentValues} gt={currentValues}/>
     }
   }
+  
