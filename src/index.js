@@ -383,7 +383,6 @@ export const createGTStoreConnect = ({ store }) => deriveQueriesFromProps => Com
 
     componentDidMount() {
       this.updateSubscriptions()
-      window.con = this
     }
 
     render() {
