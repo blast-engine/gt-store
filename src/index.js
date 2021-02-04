@@ -41,20 +41,17 @@ export const createGTStateModule = root => {
 
   const createModularGTTransitionFactory = modularTransitionFn => args => state => {
     const moduleState = state[root] || {}
-    const modularUpdateMap = modularTransitionFn({ args, state: moduleState })
-    const updateMap = rollup({
-      array: kv(modularUpdateMap),
-      deriveValue: ({ v }) => v,
-      deriveKey: ({ k }) => `${root}.${k}`
-    })
-    return updateMap
+    const updatedModuleState = modularTransitionFn({ args, state: moduleState })
+    return { ...state, [root]: updatedModuleState }
   }
 
   const moduleStateQ = createGTFunctionQuery(({ state }) => state[root] || {})
   const moduleStateF = createFactoryFromQuery(moduleStateQ)
 
   return { 
+    query: createModularGTQueryFactory,
     createModularGTQueryFactory, 
+    transition: createModularGTTransitionFactory,
     createModularGTTransitionFactory,
     moduleStateQ,
     moduleStateF
@@ -69,7 +66,7 @@ export const createGTQueryFactory = givenDefinition => givenArgs => {
     definition.argsAreValid = args => true
 
   if (!['function'].includes(typeof definition.valuesAreEquivalent))
-    definition.valuesAreEquivalent = (args1, args2) => false
+    definition.valuesAreEquivalent = (args1, args2) => args1 === args2
 
   if (!['function', 'boolean'].includes(typeof definition.argsAreEquivalent))
     definition.argsAreEquivalent = (args1, args2) => false
@@ -150,8 +147,8 @@ class GTStore {
   }
 
   doTransition = transition => {
-    const updateMap = transition(this.state)
-    this.update(updateMap)
+    const updatedState = transition(this.state)
+    this.update(updatedState)
   }
 
   watcherIdCounter = 0
