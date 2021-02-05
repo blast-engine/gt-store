@@ -1,5 +1,5 @@
 import React from 'react'
-import { Emitter, set, kv, k, v, rollup, isObj, isFn, objMap } from '@blast-engine/utils'
+import { Emitter, areShallowEquivalent, set, kv, k, v, rollup, isObj, isFn, isBool, objMap } from '@blast-engine/utils'
 
 export const generateGetter = (queryFactory, gts) =>
   args => gts.snap(queryFactory(args))
@@ -19,11 +19,15 @@ export const createGTTransitionFactory = transitionFn => args => state => {
 
 export const createGTStateModule = root => {
   const createModularGTQueryFactory = givenDefinition => {
-    
-    const givenType = givenDefinition.type
-    const modularType = `${root}_${givenType}`
-    
-    const givenDeriveValue = givenDefinition.deriveValue
+    let gdef
+    if (isFn(givenDefinition)) gdef = { deriveValue: givenDefinition }
+    else gdef = givenDefinition
+
+    const givenType = gdef.type
+    const modularType = givenType || nextAnonymousQueryId()
+    const type = `${root}_${modularType}`
+
+    const givenDeriveValue = gdef.deriveValue
     const modularDeriveValue = args => {
       const state = args.state
       const moduleState = state[root] || {}
@@ -31,8 +35,8 @@ export const createGTStateModule = root => {
     }
     
     const definition = { 
-      ...givenDefinition, 
-      type: modularType,
+      ...gdef, 
+      type,
       deriveValue: modularDeriveValue
     }
 
@@ -58,63 +62,76 @@ export const createGTStateModule = root => {
   }
 }
 
-export const createGTQueryFactory = givenDefinition => givenArgs => {
-  const definition = { ...(givenDefinition || {}) }
-  const args = { ...(givenArgs || {}) }
+// @todo: this state should be somewhere else
+let anonymousQueryTypeCounter = 0 
+export const nextAnonymousQueryId = () => 
+  `anonymous_query_type_${anonymousQueryTypeCounter++}`
 
-  if (!['function'].includes(typeof definition.argsAreValid))
+export const createGTQueryFactory = givenDefinition => {
+  let definition
+  if (isFn(givenDefinition)) definition.deriveValue = givenDefinition
+  else definition = { ...(givenDefinition || {}) }
+
+  if (!isFn(definition.argsAreValid))
     definition.argsAreValid = args => true
 
-  if (!['function'].includes(typeof definition.valuesAreEquivalent))
-    definition.valuesAreEquivalent = (args1, args2) => args1 === args2
+  if (!isFn(definition.valuesAreEquivalent))
+    definition.valuesAreEquivalent = 
+      (value1, value2) => areShallowEquivalent(value1, value2)
 
-  if (!['function', 'boolean'].includes(typeof definition.argsAreEquivalent))
-    definition.argsAreEquivalent = (args1, args2) => false
-
-  if (isObj(definition.dependencies)) {
-    const deps = definition.dependencies
-    definition.dependencies = () => deps
+  if (!isFn(definition.argsAreEquivalent))  {
+    if (isBool(definition.argsAreEquivalent)) 
+      definition.argsAreEquivalent = 
+        () => definition.argsAreEquivalent
+    else definition.argsAreEquivalent = 
+      (args1, args2) => areShallowEquivalent(args1, args2)
   }
 
-  if (!isFn(definition.dependencies)) {
-    definition.dependencies = () => {}
-  }
+  // @todo: this is no longer a pure function because of nextAnonQueryId()
+  // nextAnonQueryId function should be passed in
+  definition.type = definition.type || nextAnonymousQueryId()
+
+  let dependenciesFn
+  const givenDependencies = definition.dependencies
+  if (isFn(givenDependencies)) dependenciesFn = givenDependencies
+  else if (isObj(givenDependencies)) dependenciesFn = () => givenDependencies
+  else dependenciesFn = () => {}
+  definition.dependencies = dependenciesFn
 
   if (!isFn(definition.skipCheckIfDependenciesUnchanged)) {
     const scidc = definition.skipCheckIfDependenciesUnchanged
     definition.skipCheckIfDependenciesUnchanged = () => !!scidc
   }
 
-  const deps = definition.dependencies
-  definition.dependencies = args => kv(deps(args))
-    .map(({ k:name, v:query }) => ({ name, query }))
+  return givenArgs => {
+    const args = { ...(givenArgs || {}) }
 
-  const query = {
-    isGTQuery: true,
-    ...definition,
-    definition, givenDefinition,
-    args, givenArgs
-  }
+    const query = {
+      isGTQuery: true,
+      ...definition,
+      definition, givenDefinition,
+      args, givenArgs
+    }
 
-  query.type = definition.type || null
-  query.equals = other => {
-    if (!query.type) return false
-    if (!other.type) return false
-    if (query.type !== other.type) return false
+    query.dependencies = args => kv(definition.dependencies(args))
+      .map(({ k:name, v:query }) => ({ name, query }))
 
-    if (definition.argsAreEquivalent === true) return true
-    if (typeof definition.argsAreEquivalent === 'function') 
+    query.equals = other => {
+      if (!query.type) return false
+      if (!other.type) return false
+      if (query.type !== other.type) return false
+
       return definition.argsAreEquivalent(query.args, other.args)
-    return false
-  }
+    }
 
-  if (!definition.argsAreValid(args)) {
-    const errMsg = `invalid args provided to query ${query.type}`
-    console.error(errMsg, args)
-    throw new Error(errMsg)
-  }
+    if (!definition.argsAreValid(args)) {
+      const errMsg = `invalid args provided to query ${query.type}`
+      console.error(errMsg, args)
+      throw new Error(errMsg)
+    }
 
-  return query
+    return query
+  }
 }
 
 export const createGTQuery = definition =>
@@ -189,7 +206,7 @@ class GTStore {
         }
 
         const nextValue = this.deriveValueForWatcher(watcher)
-
+        
         const valuesAreEquivalent = watcher.query
           .valuesAreEquivalent(watcher.currentValue, nextValue)
 
@@ -228,7 +245,7 @@ class GTStore {
     const value = watcher.query.deriveValue({ 
       state: this.state,
       args: watcher.query.args,
-      depVals: dependencyCurrentValues
+      deps: dependencyCurrentValues
     })
 
     return value
@@ -307,7 +324,7 @@ class GTStore {
     return subscription
   }
 
-  subscribe({ query, handler }) {
+  subscribe = ({ query, handler }) => {
     const givenQuery = query
     if (givenQuery.isGTQuery) query = givenQuery
     else if (typeof givenQuery === 'function') query = createGTFunctionQuery(givenQuery)
@@ -317,73 +334,75 @@ class GTStore {
     const subscription = this.createSubscription({ watcher, handler })
     return { subscription, initialValue: watcher.currentValue }
   }
+
+  connect = deriveQueriesFromProps => Component => {
+    const store = this
+    return class GTConnectedComponent extends React.PureComponent {
+      state = {
+        currentValues: {},
+        queries: {},
+        subscriptions: {}
+      }
+
+      waitingUpdatedState = null
+      waitingUpdateTimeout = null
+
+      createSubscriptionHandler = name => updatedValue => {
+        const state = this.waitingUpdatedState || this.state
+        this.waitingUpdatedState = set(state, { [`currentValues.${name}`]: updatedValue })
+
+        if (this.waitingUpdateTimeout) return
+        this.waitingUpdateTimeout = setTimeout(() => {
+          this.waitingUpdateTimeout = null
+          const updatedState = this.waitingUpdatedState
+          this.waitingUpdatedState = null
+          this.setState(updatedState)
+        })
+      }
+
+      updateSubscriptions() {
+        const queries = deriveQueriesFromProps(this.props)
+        
+        const changedQueries = kv(queries, { k:'name', v:'query' })
+          .filter(({ name, query }) => {
+            const currentQuery = this.state.queries[name]
+            if (!currentQuery) return true
+            return !currentQuery.equals(query)
+          })
+
+        if (!changedQueries.length) return
+        console.log(changedQueries)      
+        const updatedState = changedQueries.reduce((updatedState, { name, query }) => {
+          const existingSubscription = this.state.subscriptions[name]
+          if (existingSubscription) existingSubscription.kill()
+          const handler = this.createSubscriptionHandler(name)
+          const { subscription, initialValue } = store.subscribe({ query, handler })
+          return set(updatedState, {
+            [`queries.${name}`]: query,
+            [`subscriptions.${name}`]: subscription,
+            [`currentValues.${name}`]: initialValue
+          })
+        }, this.state)
+
+        this.setState(updatedState)
+      }
+
+      componentDidUpdate() {
+        this.updateSubscriptions()
+      }
+
+      componentDidMount() {
+        this.updateSubscriptions()
+      }
+
+      render() {
+        const { currentValues } = this.state
+        return <Component {...this.props} {...currentValues} gt={currentValues}/>
+      }
+    }
+  }
 }
 
 export const createGTStore = () => {
   return new GTStore
 }
-
-export const createGTStoreConnect = ({ store }) => deriveQueriesFromProps => Component => 
-  class GTConnectedComponent extends React.PureComponent {
-    state = {
-      currentValues: {},
-      queries: {},
-      subscriptions: {}
-    }
-
-    waitingUpdatedState = null
-    waitingUpdateTimeout = null
-
-    createSubscriptionHandler = name => updatedValue => {
-      const state = this.waitingUpdatedState || this.state
-      this.waitingUpdatedState = set(state, { [`currentValues.${name}`]: updatedValue })
-
-      if (this.waitingUpdateTimeout) return
-      this.waitingUpdateTimeout = setTimeout(() => {
-        this.waitingUpdateTimeout = null
-        const updatedState = this.waitingUpdatedState
-        this.waitingUpdatedState = null
-        this.setState(updatedState)
-      })
-    }
-
-    updateSubscriptions() {
-      const queries = deriveQueriesFromProps(this.props)
-      
-      const changedQueries = kv(queries, { k:'name', v:'query' })
-        .filter(({ name, query }) => {
-          const currentQuery = this.state.queries[name]
-          if (!currentQuery) return true
-          return !currentQuery.equals(query)
-        })
-
-      if (!changedQueries.length) return
-      
-      const updatedState = changedQueries.reduce((updatedState, { name, query }) => {
-        const existingSubscription = this.state.subscriptions[name]
-        if (existingSubscription) existingSubscription.kill()
-        const handler = this.createSubscriptionHandler(name)
-        const { subscription, initialValue } = store.subscribe({ query, handler })
-        return set(updatedState, {
-          [`queries.${name}`]: query,
-          [`subscriptions.${name}`]: subscription,
-          [`currentValues.${name}`]: initialValue
-        })
-      }, this.state)
-
-      this.setState(updatedState)
-    }
-
-    componentDidUpdate() {
-      this.updateSubscriptions()
-    }
-
-    componentDidMount() {
-      this.updateSubscriptions()
-    }
-
-    render() {
-      const { currentValues } = this.state
-      return <Component {...this.props} {...currentValues} gt={currentValues}/>
-    }
-  }
