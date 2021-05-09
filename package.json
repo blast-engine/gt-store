@@ -1,6 +1,6 @@
 {
   "name": "@blast-engine/gt-store",
-  "version": "1.0.8",
+  "version": "1.0.9",
   "main": "dist/gt-store.js",
   "scripts": {
     "build": "webpack",
