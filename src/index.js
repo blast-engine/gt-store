@@ -553,7 +553,7 @@ gt.module = definition => {
 
     controller.queries = u.kvr(
       u.kv(definition.queries).map(({ k: name, v: queryCreator }) => {
-        const provisionedQueryCreator = ({ args, options } = {}) =>
+        const provisionedQueryCreator = (args, options) =>
           queryCreator({
             args,
             options,
@@ -566,7 +566,7 @@ gt.module = definition => {
 
     controller.transitions = u.kvr(
       u.kv(definition.transitions).map(({ k: name, v: transition }) => {
-        const provisionedTransition = ({ args, options } = {}) =>
+        const provisionedTransition = (args, options) =>
           transition({
             args,
             options,
@@ -579,7 +579,7 @@ gt.module = definition => {
     controller.getters = u.kvr(
       u.kv(model.queries).map(({ k: name, v: query }) => ({
         k: name,
-        v: ({ args, options } = {}) => provisions.store.snap(query({ args, options }))
+        v: (args, options) => provisions.store.snap(query(args, options))
       }))
     );
 
@@ -587,7 +587,7 @@ gt.module = definition => {
       ...u.kvr(
         u.kv(model.transitions).map(({ k: name, v: transition }) => ({
           k: name,
-          v: ({ args, options } = {}) =>
+          v: (args, options) =>
             provisions.store.doTransition(state =>
               transition({
                 args,
@@ -601,7 +601,7 @@ gt.module = definition => {
       ...u.kvr(
         u.kv(definition.actions).map(({ k: name, v: action }) => ({
           k: name,
-          v: ({ args, options } = {}) =>
+          v: (args, options) =>
             action({
               args,
               options,
@@ -614,7 +614,7 @@ gt.module = definition => {
       )
     };
 
-    controller.init = async ({ args, options } = {}) => {
+    controller.init = async (args, options) => {
       if (!definition.init) return null;
       return definition.init({
         args,
