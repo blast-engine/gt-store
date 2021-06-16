@@ -1,10 +1,11 @@
 {
   "name": "@blast-engine/gt-store",
-  "version": "1.0.15",
+  "version": "1.0.16",
   "main": "dist/gt-store.js",
   "scripts": {
     "build": "webpack",
-    "build:watch": "webpack --watch"
+    "build:watch": "webpack --watch",
+    "scratch": "node --inspect ./scratchpads/scratch1.js"
   },
   "dependencies": {
     "@babel/cli": "7.14.5",
