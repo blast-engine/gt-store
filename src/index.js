@@ -1,8 +1,12 @@
 import React from 'react';
 import * as u from '@blast-engine/utils';
+import * as _qf from './query-factory'
+
 
 export const gt = {};
+export const qf = _qf;
 
+/*
 gt.basicTransitionalStore = () => {
   const store = { _state: {}, _emitter: new u.Emitter() };
 
@@ -64,77 +68,75 @@ gt.redux = gt.createReduxGTStoreFromCreateReduxStore;
 
 // @todo: this state should be somewhere else
 let anonymousQueryTypeCounter = 0;
-const nextAnonymousQueryId = () =>
+const getNextAnonymousQueryId = () =>
   `anonymous_query_type_${anonymousQueryTypeCounter++}`;
 
-gt.createGTQueryFactory = givenDefinition => {
-  let definition = u.isFn(givenDefinition)
-    ? { deriveValue: givenDefinition }
-    : { ...(givenDefinition || {}) };
+gt.createGTQueryFactory = createQueryFactory({ getNextAnonymousQueryId });
+// gt.createGTQueryFactory = createQueryFactory || givenDefinition => {
+//   let definition = u.isFn(givenDefinition)
+//     ? { deriveValue: givenDefinition }
+//     : { ...(givenDefinition || {}) };
 
-  if (!u.isFn(definition.argsAreValid)) definition.argsAreValid = () => true;
+//   if (!u.isFn(definition.argsAreValid)) definition.argsAreValid = () => true;
 
-  if (!u.isFn(definition.valuesAreEquivalent))
-    definition.valuesAreEquivalent = ({ value, otherValue }) =>
-      u.areShallowEquivalent(value, otherValue);
+//   if (!u.isFn(definition.valuesAreEquivalent))
+//     definition.valuesAreEquivalent = ({ value, otherValue }) =>
+//       u.areShallowEquivalent(value, otherValue);
 
-  if (!u.isFn(definition.argsAreEquivalent)) {
-    if (u.isBool(definition.argsAreEquivalent))
-      definition.argsAreEquivalent = () => definition.argsAreEquivalent;
-    else
-      definition.argsAreEquivalent = ({ args, otherArgs }) =>
-        u.areShallowEquivalent(args, otherArgs);
-  }
+//   if (!u.isFn(definition.argsAreEquivalent)) {
+//     if (u.isBool(definition.argsAreEquivalent))
+//       definition.argsAreEquivalent = () => definition.argsAreEquivalent;
+//     else
+//       definition.argsAreEquivalent = ({ args, otherArgs }) =>
+//         u.areShallowEquivalent(args, otherArgs);
+//   }
 
-  // @todo: this is no longer a pure function because of nextAnonQueryId()
-  // nextAnonQueryId function should be passed in
-  definition.type = definition.type || nextAnonymousQueryId();
+//   // @todo: this is no longer a pure function because of nextAnonQueryId()
+//   // nextAnonQueryId function should be passed in
+//   definition.type = definition.type || nextAnonymousQueryId();
 
-  let dependenciesFn;
-  const givenDependencies = definition.dependencies;
-  if (u.isFn(givenDependencies)) dependenciesFn = givenDependencies;
-  else if (u.isObj(givenDependencies)) dependenciesFn = () => givenDependencies;
-  else dependenciesFn = () => {};
-  definition.dependencies = dependenciesFn;
+//   let dependenciesFn;
+//   const givenDependencies = definition.dependencies;
+//   if (u.isFn(givenDependencies)) dependenciesFn = givenDependencies;
+//   else if (u.isObj(givenDependencies)) dependenciesFn = () => givenDependencies;
+//   else dependenciesFn = () => {};
+//   definition.dependencies = dependenciesFn;
 
-  if (!u.isFn(definition.skipCheckIfDependenciesUnchanged)) {
-    const scidc = definition.skipCheckIfDependenciesUnchanged;
-    definition.skipCheckIfDependenciesUnchanged = () => !!scidc;
-  }
+//   if (!u.isFn(definition.skipCheckIfDependenciesUnchanged)) {
+//     const scidc = definition.skipCheckIfDependenciesUnchanged;
+//     definition.skipCheckIfDependenciesUnchanged = () => !!scidc;
+//   }
 
-  return ({ args = {}, module }) => {
-    const query = {
-      isGTQuery: true,
-      ...definition,
-      definition,
-      givenDefinition,
-      args,
-      module
-    };
+//   return ({ args = {}, model }) => {
+//     const query = {
+//       isGTQuery: true,
+//       ...definition,
+//       args,
+//     };
 
-    query.dependencies = ({ args } = {}) =>
-      definition.dependencies({ args, module });
+//     query.dependencies = ({ args } = {}) =>
+//       definition.dependencies({ args, model });
 
-    query.equals = ({ otherQuery }) => {
-      if (!query.type) return false;
-      if (!otherQuery.type) return false;
-      if (query.type !== otherQuery.type) return false;
+//     query.equals = ({ otherQuery }) => {
+//       if (!query.type) return false;
+//       if (!otherQuery.type) return false;
+//       if (query.type !== otherQuery.type) return false;
 
-      return definition.argsAreEquivalent({
-        args: query.args,
-        otherArgs: otherQuery.args
-      });
-    };
+//       return definition.argsAreEquivalent({
+//         args: query.args,
+//         otherArgs: otherQuery.args
+//       });
+//     };
 
-    if (!definition.argsAreValid(({ args } = {}))) {
-      const errMsg = `invalid args provided to query ${query.type}`;
-      console.error(errMsg, args);
-      throw new Error(errMsg);
-    }
+//     if (!definition.argsAreValid(({ args } = {}))) {
+//       const errMsg = `invalid args provided to query ${query.type}`;
+//       console.error(errMsg, args);
+//       throw new Error(errMsg);
+//     }
 
-    return query;
-  };
-};
+//     return query;
+//   };
+// };
 
 gt.query = gt.createGTQueryFactory;
 
@@ -215,7 +217,7 @@ gt.pureSnap = (state, query) => {
   );
 
   const value = query.deriveValue({
-    module: query.module,
+    model: query.model,
     state: state,
     args: query.args,
     deps: dependencies
@@ -321,7 +323,7 @@ gt.GTStore = class GTStore {
     });
 
     const value = watcher.query.deriveValue({
-      module: watcher.query.module,
+      model: watcher.query.model,
       state: this.state(),
       args: watcher.query.args,
       deps: dependencyCurrentValues
@@ -494,16 +496,15 @@ gt.GTStore = class GTStore {
 
 // ------
 
-gt.normalizeModuleDefinition = definition => ({
+gt.normalizeModelDefinition = definition => ({
   name: definition.name,
   queries: definition.queries || []
 });
 
-gt.module = definition => {
-  const model = {};
-  const pureModule = {};
+gt.model = definition => {
+  const model = {}
 
-  model.get = (state, path) => u.get(state[definition.name], path);
+  model.get = (state, path = '') => u.get(state[definition.name], path);
 
   model.modularizeUpdate = update =>
     u.kvr(
@@ -518,38 +519,70 @@ gt.module = definition => {
 
   model.queries = u.kvr(
     u.kv(definition.queries).map(({ k: name, v: queryCreator }) => {
-      const moduleWrappedQueryCreator = ({ args, options } = {}) =>
+      const modelWrappedQueryCreator = ({ args, options } = {}) =>
         queryCreator({
           args,
           options,
-          module: pureModule,
+          model,
           snap: gt.pureSnap
         });
-      return { k: name, v: moduleWrappedQueryCreator };
+      return { k: name, v: modelWrappedQueryCreator };
     })
   );
 
   model.transitions = u.kvr(
     u.kv(definition.transitions).map(({ k: name, v: transition }) => {
-      const moduleWrappedTransition = ({ args, options } = {}) =>
+      const modelWrappedTransition = ({ args, options } = {}) =>
         transition({
           args,
           options,
-          module: pureModule,
+          model,
           snap: gt.pureSnap
         });
-      return { k: name, v: moduleWrappedTransition };
+      return { k: name, v: modelWrappedTransition };
     })
-  );
+  )
 
-  model.provision = provisions => {
-    const controller = { provisions };
-    const provisionedModule = {};
+  model.provisionStateModuleDependencies = ({ dependencies }) => {
+    const linkedModel = {}
 
-    controller.get = path => model.get(provisions.store.state(), path);
+    linkedModel.queries = u.kvr(
+      u.kv(model.queries).map(({ k: name, v: queryCreator }) => {
+        const linkedModelWrappedQueryCreator = ({ args, options } = {}) =>
+          queryCreator({
+            args,
+            options,
+            dependencies,
+          });
+        return { k: name, v: linkedModelWrappedQueryCreator };
+      }))
+
+    linkedModel.transitions = u.kvr(
+      u.kv(definition.transitions).map(({ k: name, v: transition }) => {
+        const modelWrappedTransition = ({ args, options } = {}) =>
+          transition({
+            args,
+            options,
+            model,
+            snap: gt.pureSnap
+          });
+        return { k: name, v: modelWrappedTransition };
+      }))
+
+    return {
+      definition,
+      model,
+      linkedModel
+    }
+  }
+
+  model.provisionStore = ({ store, dependencies }) => {
+    const controller = { store };
+
+    controller.get = path => model.get(store.state(), path);
 
     controller.update = update => 
-      provisions.store.update(model.modularizeUpdate(update));
+      store.update(model.modularizeUpdate(update));
 
     controller.queries = u.kvr(
       u.kv(definition.queries).map(({ k: name, v: queryCreator }) => {
@@ -557,7 +590,7 @@ gt.module = definition => {
           queryCreator({
             args,
             options,
-            module: pureModule,
+            model,
             services: provisions.services
           });
         return { k: name, v: provisionedQueryCreator };
@@ -606,7 +639,7 @@ gt.module = definition => {
               args,
               options,
               store: provisions.store,
-              module: provisionedModule,
+              model: provisionedModel,
               snap: provisions.store.snap,
               services: provisions.services
             })
@@ -620,7 +653,7 @@ gt.module = definition => {
         args,
         options,
         store: provisions.store,
-        module: provisionedModule,
+        model: provisionedModel,
         snap: provisions.store.snap,
         services: provisions.services
       });
@@ -638,7 +671,7 @@ gt.module = definition => {
             args,
             options,
             store: provisions.store,
-            module: provisionedModule,
+            model: provisionedModel,
             snap: provisions.store.snap,
             services: provisions.services
           })
@@ -650,7 +683,7 @@ gt.module = definition => {
         const reaction = reactionCreator({
           args: reactionArgs[name],
           store: provisions.store,
-          module: provisionedModule,
+          model: provisionedModel,
           snap: provisions.store.snap,
           services: provisions.services
         });
@@ -700,24 +733,21 @@ gt.module = definition => {
       controller.activeReactions.current = notStoppedReactions;
     };
 
-    Object.assign(provisionedModule, {
-      ...definition,
-      ...model,
-      ...controller,
+    Object.assign(controller, {
       definition,
       model,
       controller
     });
 
-    return provisionedModule;
+    return provisionedModel;
   };
 
-  Object.assign(pureModule, {
-    ...definition,
-    ...model,
+  const module = {
     definition,
     model
-  });
+  }
 
-  return pureModule;
+  return module;
 };
+
+*/
